@@ -11,6 +11,19 @@ import base64
 import csv
 import pyperclip
 
+basedir = os.path.dirname(__file__)
+
+class PasswordButton(QPushButton):
+    def __init__(self, password: str, text: str = "*****"):
+        super().__init__(text)
+        self.key = password
+
+    def password(self) -> str:
+        return self.key
+    
+    def setPassword(self, password: str):
+        self.key = password
+
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
@@ -19,7 +32,7 @@ class MainWindow(QMainWindow):
         self.scene = QStackedWidget()
         self.setCentralWidget(self.scene)
 
-        if os.path.exists("secretformula.csv"):
+        if os.path.exists(os.path.join(basedir, 'secretformula.csv')):
             self.switchWidget(Login(self))
         else:
             self.switchWidget(FirstTime(self))
@@ -184,43 +197,58 @@ class PasswordView(QWidget):
         self.vbox.addLayout(self.inputHBox)
         self.vbox.addLayout(self.searchHBox)
 
-        df = pd.read_csv('secretformula.csv')
-        self.generateRow(df.columns.values, True)
-        df.apply(self.generateRow, axis = 1)
+        try:
+            df = pd.read_csv(os.path.join(basedir, 'secretformula.csv'), header = None)
+            self.generateHeader()
+            df.apply(self.generateRow, axis = 1)
+        except Exception as ex:
+            print(ex)
+            self.generateHeader()
 
         self.setLayout(self.vbox)
 
-    
-    def generateRow(self, row : list, green : bool = False):
+    def generateHeader(self):
+        hbox = QHBoxLayout()
+        serviceButton = QPushButton("Service")
+        serviceButton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setStyle(serviceButton, True)
+
+        usernameButton = QPushButton("Username")
+        usernameButton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setStyle(usernameButton, True)
+
+        passwordButton = QPushButton("Password")
+        passwordButton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setStyle(passwordButton, True)
+
+        button1 = QPushButton("EDIT")
+        customHide(button1, True)
+        button2 = QPushButton("DELETE")
+        customHide(button2, True)
+        hbox.addWidget(serviceButton)
+        hbox.addWidget(usernameButton)
+        hbox.addWidget(passwordButton)
+        hbox.addWidget(button1)
+        hbox.addWidget(button2)
+        self.vbox.addLayout(hbox)
+
+    def generateRow(self, row : list):
         hbox = QHBoxLayout()
 
         serviceButton = QPushButton(row[0])
         serviceButton.clicked.connect(lambda:copyToClipBoard(serviceButton.text()))
         serviceButton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setStyle(serviceButton, green)
+        self.setStyle(serviceButton)
 
         usernameButton = QPushButton(row[1])
         usernameButton.clicked.connect(lambda:copyToClipBoard(usernameButton.text()))
         usernameButton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setStyle(usernameButton, green)
+        self.setStyle(usernameButton)
 
-        passwordButton = QPushButton(row[2])
-        passwordButton.clicked.connect(lambda:copyToClipBoard(passwordButton.text()))
+        passwordButton = PasswordButton(row[2])
+        passwordButton.clicked.connect(lambda:copyToClipBoard(passwordButton.password()))
         passwordButton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setStyle(passwordButton, green)
-
-        if (green):
-            button1 = QPushButton("EDIT")
-            customHide(button1, True)
-            button2 = QPushButton("DELETE")
-            customHide(button2, True)
-            hbox.addWidget(serviceButton)
-            hbox.addWidget(usernameButton)
-            hbox.addWidget(passwordButton)
-            hbox.addWidget(button1)
-            hbox.addWidget(button2)
-            self.vbox.addLayout(hbox)
-            return
+        self.setStyle(passwordButton)
 
         serviceLineEdit = QLineEdit()
         usernameLineEdit = QLineEdit()
@@ -272,7 +300,7 @@ class PasswordView(QWidget):
 
         if (service and username and password):
             decryptCSV(self.key)
-            with open('secretformula.csv', 'a', newline='') as f:
+            with open(os.path.join(basedir, 'secretformula.csv'), 'a', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow([service, username, password])
             encryptCSV(self.key)
@@ -307,7 +335,7 @@ class PasswordView(QWidget):
         elif (self.grey):
             button.setStyleSheet("background-color:#808080; color:white; font-family: \"Comic Sans MS\", \"Comic Sans\"; font-size:18px;")
         else:
-            button.setStyleSheet("background-color:#A9A9A9; color:white; font-family: \"Comic Sans MS\", \"Comic Sans\"; font-size:18px;")
+            button.setStyleSheet("background-color:white; color:black; font-family: \"Comic Sans MS\", \"Comic Sans\"; font-size:18px;")
 
     def deleteButtonFunction(self, deleteButton : QPushButton, yesButton : QPushButton, noButton : QPushButton, editButton : QPushButton):
         editButton.hide()
@@ -329,13 +357,13 @@ class PasswordView(QWidget):
         self.updateCSV()
         self.redisplay()
 
-    def editButtonFunction(self, serviceButton : QPushButton, usernameButton : QPushButton, passwordButton : QPushButton, serviceLineEdit : QLineEdit, usernameLineEdit : QLineEdit, passwordLineEdit : QLineEdit, editButton : QPushButton, cancelButton : QPushButton, confirmButton : QPushButton, deleteButton : QPushButton):
+    def editButtonFunction(self, serviceButton : QPushButton, usernameButton : QPushButton, passwordButton : PasswordButton, serviceLineEdit : QLineEdit, usernameLineEdit : QLineEdit, passwordLineEdit : QLineEdit, editButton : QPushButton, cancelButton : QPushButton, confirmButton : QPushButton, deleteButton : QPushButton):
         serviceButton.hide()
         usernameButton.hide()
         passwordButton.hide()
         serviceLineEdit.setText(serviceButton.text())
         usernameLineEdit.setText(usernameButton.text())
-        passwordLineEdit.setText(passwordButton.text())
+        passwordLineEdit.setText(passwordButton.password())
         serviceLineEdit.show()
         usernameLineEdit.show()
         passwordLineEdit.show()
@@ -344,22 +372,24 @@ class PasswordView(QWidget):
         cancelButton.show()
         confirmButton.show()
 
-    def cancelButtonFunction(self, serviceButton : QPushButton, usernameButton : QPushButton, passwordButton : QPushButton, serviceLineEdit : QLineEdit, usernameLineEdit : QLineEdit, passwordLineEdit : QLineEdit, editButton : QPushButton, cancelButton : QPushButton, confirmButton : QPushButton, deleteButton : QPushButton):
+    def cancelButtonFunction(self, serviceButton : QPushButton, usernameButton : QPushButton, passwordButton : PasswordButton, serviceLineEdit : QLineEdit, usernameLineEdit : QLineEdit, passwordLineEdit : QLineEdit, editButton : QPushButton, cancelButton : QPushButton, confirmButton : QPushButton, deleteButton : QPushButton):
         serviceLineEdit.hide()
         usernameLineEdit.hide()
         passwordLineEdit.hide()
         serviceButton.show()
         usernameButton.show()
+        passwordButton.setText("*****")
         passwordButton.show()
         cancelButton.hide()
         confirmButton.hide()
         editButton.show()
         deleteButton.show()
 
-    def confirmButtonFunction(self, serviceButton : QPushButton, usernameButton : QPushButton, passwordButton : QPushButton, serviceLineEdit : QLineEdit, usernameLineEdit : QLineEdit, passwordLineEdit : QLineEdit, editButton : QPushButton, cancelButton : QPushButton, confirmButton : QPushButton, deleteButton : QPushButton):
+    def confirmButtonFunction(self, serviceButton : QPushButton, usernameButton : QPushButton, passwordButton : PasswordButton, serviceLineEdit : QLineEdit, usernameLineEdit : QLineEdit, passwordLineEdit : QLineEdit, editButton : QPushButton, cancelButton : QPushButton, confirmButton : QPushButton, deleteButton : QPushButton):
         serviceButton.setText(serviceLineEdit.text())
         usernameButton.setText(usernameLineEdit.text())
-        passwordButton.setText(passwordLineEdit.text())
+        passwordButton.setPassword(passwordLineEdit.text())
+        passwordButton.setText("*****")
         serviceLineEdit.hide()
         usernameLineEdit.hide()
         passwordLineEdit.hide()
@@ -373,29 +403,28 @@ class PasswordView(QWidget):
         self.updateCSV()
 
     def updateCSV(self):
-        with open('secretformula.csv', 'w', newline='') as f:
+        with open(os.path.join(basedir, 'secretformula.csv'), 'w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(["Service", "Username", "Password"])
             for i in range(3, self.vbox.count()):
-                writer.writerow([self.vbox.itemAt(i).itemAt(0).widget().text(), self.vbox.itemAt(i).itemAt(1).widget().text(), self.vbox.itemAt(i).itemAt(2).widget().text()])
+                writer.writerow([self.vbox.itemAt(i).itemAt(0).widget().text(), self.vbox.itemAt(i).itemAt(1).widget().text(), self.vbox.itemAt(i).itemAt(2).widget().password()])
         encryptCSV(self.key)
         
 
 def createCSV(password : str):
-    with open('secretformula.csv', 'w', newline='') as f:
+    with open(os.path.join(basedir, 'secretformula.csv'), 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(["Service", "Username", "Password"])
 
     salt = os.urandom(16)
-    with open('salt.txt', 'wb') as f:
+    with open(os.path.join(basedir, 'salt.txt'), 'wb') as f:
         f.write(salt)
+
     key = generateKey(password)
     encryptCSV(key)
     return key
 
 def decryptCSV(key: bytes):
     fernet = Fernet(key)
-    with open('secretformula.csv', 'rb') as f:
+    with open(os.path.join(basedir, 'secretformula.csv'), 'rb') as f:
         encrypted = f.read()
 
     try:
@@ -403,7 +432,7 @@ def decryptCSV(key: bytes):
     except:
         return False
 
-    with open('secretformula.csv', 'wb') as f:
+    with open(os.path.join(basedir, 'secretformula.csv'), 'wb') as f:
         f.write(decrypted)
 
     return True
@@ -411,16 +440,16 @@ def decryptCSV(key: bytes):
 def encryptCSV(key: bytes):
     fernet = Fernet(key)
 
-    with open('secretformula.csv', 'rb') as f:
+    with open(os.path.join(basedir, 'secretformula.csv'), 'rb') as f:
         decrypted = f.read()
 
     encrypted = fernet.encrypt(decrypted)
 
-    with open('secretformula.csv', 'wb') as f:
+    with open(os.path.join(basedir, 'secretformula.csv'), 'wb') as f:
         f.write(encrypted)
 
 def getSalt():
-    with open('salt.txt', 'rb') as f:
+    with open(os.path.join(basedir, 'salt.txt'), 'rb') as f:
         return f.read()
 
 def generateKey(password : str):
@@ -439,7 +468,20 @@ def customHide(button : QPushButton, inPlace : bool = False):
     button.hide()    
 
 if __name__ == '__main__':
+
+    try:
+        from ctypes import windll
+        myappid = 'bru.1.0'
+        windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except ImportError:
+        pass
+
+
     app = QApplication([])
+    app.setStyle('Fusion')
+    app.setWindowIcon(QIcon(os.path.join(basedir, 'icon.ico')))
     window = MainWindow()
+    window.setFixedWidth(900)
+    window.setMinimumHeight(600)
     window.show()
     sys.exit(app.exec_())
