@@ -7,4 +7,4 @@ In terms of user interface, BRU features the ability to add, edit, and delete pa
 1. Download this [zip folder](bru.zip) to your computer by clicking the "download raw file" button.
 2. Extract the folder on your computer.
 3. Move the inside "bru" folder out of the extracted folder, and delete the now empty extracted folder.
-5. Click into bru -> bru.exe to run the program, feel free to pin the program to start or taskbar!
+5. Click into bru &rarr bru.exe to run the program, feel free to pin the program to start or taskbar!
