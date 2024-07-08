@@ -1,9 +1,8 @@
 import sys
 from PyQt5.QtWidgets import *    
 from PyQt5.QtGui import *
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from cryptography.fernet import Fernet
-import pandas as pd
 import os
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -27,8 +26,8 @@ class PasswordButton(QPushButton):
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
-        self.setWindowTitle("bru.exe")
-        self.setFont(QFont("Comic Sans MS", 10))
+        self.setWindowTitle("bru")
+        self.setFont(QFont("Inter", 10))
         self.scene = QStackedWidget()
         self.setCentralWidget(self.scene)
 
@@ -41,34 +40,43 @@ class MainWindow(QMainWindow):
         oneString = self.scene.currentWidget().oneLineEdit.text()
         twoString = self.scene.currentWidget().twoLineEdit.text()
 
+        # not sure if this even matters, python seems to convert it into a UTF character regardless if its in a string
         try:
             oneString.encode(encoding = 'UTF-8', errors = 'strict')
             twoString.encode(encoding = 'UTF-8', errors = 'strict')
         except:
             self.scene.currentWidget().errorLabel.setText("Invalid Characters")
             
-
-        if (oneString != twoString):
-            self.scene.currentWidget().errorLabel.setText("Passwords Do Not Match")
-            self.scene.currentWidget().errorLabel.show()
+        if (len(oneString) == 0):
+            self.showErrorMessage("Please Enter a Password")
+        elif (len(twoString) == 0):
+            self.showErrorMessage("Please Re-Enter the Password")
+        elif (oneString != twoString):
+            self.showErrorMessage("Passwords Do Not Match")
         else:
             key = createCSV(oneString)
             decryptCSV(key)
-            self.switchWidget(PasswordView(key, self))
-            self.scrollbar()
-            encryptCSV(key)
+            try:
+                self.switchWidget(PasswordView(key, self))
+                self.scrollbar()
+            except:
+                self.showErrorMessage("ERROR: Application Failed to Load")
+            finally:encryptCSV(key)
 
     def checkPassword(self):
         password = self.scene.currentWidget().passwordLineEdit.text()
         key = generateKey(password)
 
         if (decryptCSV(key)):
-            self.switchWidget(PasswordView(key, self))
-            self.scrollbar()
-            encryptCSV(key)
+            try:
+                self.switchWidget(PasswordView(key, self))
+                self.scrollbar()
+            except:
+                self.showErrorMessage("ERROR: Password was Correct, but Application Failed to Load")
+            finally:
+                encryptCSV(key)
         else:
-            self.scene.currentWidget().errorLabel.setText("Incorrect Password")
-            self.scene.currentWidget().errorLabel.show()
+            self.showErrorMessage("Incorrect Password")
 
     def switchWidget(self, widget):
         self.scene.addWidget(widget)
@@ -83,39 +91,61 @@ class MainWindow(QMainWindow):
         self.scene.addWidget(self.scroll)
         self.scene.setCurrentWidget(self.scroll)
 
+    def showErrorMessage(self, message: str, timeout: int = 2000):
+        self.scene.currentWidget().errorLabel.setText(message)
+        self.scene.currentWidget().errorLabel.show()
+        self.scene.currentWidget().setTimeout(timeout)
+
 class FirstTime(QDialog) :
     def __init__(self, parent=None):
         super(FirstTime, self).__init__(parent)
         self.initUI()
 
     def initUI(self):
-        self.introLabel = QLabel(self)
-        self.introLabel.setText("Welcome! Please enter a password which will act as a master password to all of your other passwords.")
+        vbox = QVBoxLayout(self)
+        vbox.setAlignment(Qt.AlignTop)
 
-        self.oneLabel = QLabel(self)
-        self.oneLabel.setText("Password: ")
-        self.oneLineEdit = QLineEdit(self)
-        self.oneLabel.setBuddy(self.oneLineEdit)
+        self.timer = QTimer(self)
 
-        self.twoLabel = QLabel(self)
-        self.twoLabel.setText("Re-Enter Password: ")
-        self.twoLineEdit = QLineEdit(self)
-        self.twoLabel.setBuddy(self.twoLineEdit)
+        introLabel = QLabel()
+        introLabel.setText("Welcome! Please enter a password which will act as a master password to all of your other passwords.")
+        introLabel.setContentsMargins(0, 0, 0, 50)
 
-        self.okButton = QPushButton("OK", self)
-        self.okButton.clicked.connect(self.parent().createPassword)
+        oneLabel = QLabel()
+        oneLabel.setText("Password: ")
+        self.oneLineEdit = QLineEdit()
+        oneLabel.setBuddy(self.oneLineEdit)
 
-        self.errorLabel = QLabel(self)
+        twoLabel = QLabel()
+        twoLabel.setText("Re-Enter Password: ")
+        self.twoLineEdit = QLineEdit()
+        twoLabel.setBuddy(self.twoLineEdit)
+
+        okButton = QPushButton("OK")
+        okButton.clicked.connect(self.parent().createPassword)
+
+        self.errorLabel = QLabel()
+        self.errorLabel.setContentsMargins(0, 100, 0, 0)
         self.errorLabel.hide()
 
-        self.gridLayout = QGridLayout(self)
-        self.gridLayout.addWidget(self.introLabel, 0, 0, 1, 2, Qt.AlignCenter)
-        self.gridLayout.addWidget(self.oneLabel, 1, 0)
-        self.gridLayout.addWidget(self.oneLineEdit, 1, 1)
-        self.gridLayout.addWidget(self.twoLabel, 2, 0)
-        self.gridLayout.addWidget(self.twoLineEdit, 2, 1)
-        self.gridLayout.addWidget(self.okButton, 3, 0, 1, 2, Qt.AlignCenter)
-        self.gridLayout.addWidget(self.errorLabel, 4, 0, 1, 2, Qt.AlignCenter)
+        grid = QGridLayout()
+        grid.addWidget(oneLabel, 0, 0)
+        grid.addWidget(self.oneLineEdit, 0, 1)
+        grid.addWidget(twoLabel, 1, 0)
+        grid.addWidget(self.twoLineEdit, 1, 1)
+
+        vbox.addWidget(introLabel, alignment=Qt.AlignCenter)
+        vbox.addLayout(grid)
+        vbox.addWidget(okButton, alignment=Qt.AlignCenter)
+        vbox.addWidget(self.errorLabel, alignment=Qt.AlignCenter)
+        
+    def hideErrorLabel(self):
+        self.errorLabel.hide()
+
+    def setTimeout(self, timeout: int):
+        self.timer.setInterval(timeout)
+        self.timer.timeout.connect(self.hideErrorLabel)
+        self.timer.start()
 
 class Login(QDialog) :
     def __init__(self, parent = None):
@@ -123,24 +153,40 @@ class Login(QDialog) :
         self.initUI()
 
     def initUI(self):
-        self.passwordLabel = QLabel(self)
-        self.passwordLabel.setText("Password: ")
-        self.passwordLineEdit = QLineEdit(self)
+        vbox = QVBoxLayout(self)
+        vbox.setAlignment(Qt.AlignTop)
+
+        hbox = QHBoxLayout()
+
+        passwordLabel = QLabel()
+        passwordLabel.setText("Password: ")
+        self.passwordLineEdit = QLineEdit()
         self.passwordLineEdit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.passwordLabel.setBuddy(self.passwordLineEdit)
+        passwordLabel.setBuddy(self.passwordLineEdit)
 
-        self.enterButton = QPushButton("ENTER", self)
-        self.enterButton.clicked.connect(self.parent().checkPassword)
+        enterButton = QPushButton("ENTER")
+        enterButton.clicked.connect(self.parent().checkPassword)
 
-        self.errorLabel = QLabel(self)
+        self.errorLabel = QLabel()
+        self.errorLabel.hide()
+        
+        self.timer = QTimer(self)
+
+        hbox.addWidget(passwordLabel)
+        hbox.addWidget(self.passwordLineEdit)
+        hbox.addWidget(enterButton)
+        hbox.setContentsMargins(0, 0, 0, 100)
+
+        vbox.addLayout(hbox)
+        vbox.addWidget(self.errorLabel, alignment=Qt.AlignCenter)
+
+    def hideErrorLabel(self):
         self.errorLabel.hide()
 
-        self.gridLayout = QGridLayout(self)
-        self.gridLayout.addWidget(self.passwordLabel, 0, 0)
-        self.gridLayout.addWidget(self.passwordLineEdit, 0, 1)
-        self.gridLayout.addWidget(self.enterButton, 1, 0, 1, 2, Qt.AlignCenter)
-        self.gridLayout.addWidget(self.errorLabel, 2, 0, 1, 2, Qt.AlignCenter)
-    
+    def setTimeout(self, timeout: int):
+        self.timer.setInterval(timeout)
+        self.timer.timeout.connect(self.hideErrorLabel)
+        self.timer.start()
 
 
 class PasswordView(QWidget):
@@ -152,84 +198,93 @@ class PasswordView(QWidget):
     def initUI(self):
         self.grey = False
         self.vbox = QVBoxLayout(self)
-        
-        self.serviceLabel = QLabel(self)
-        self.serviceLabel.setText("Service: ")
-        self.serviceLineEdit = QLineEdit(self)
-        self.serviceLabel.setBuddy(self.serviceLineEdit)
+        self.vbox.setAlignment(Qt.AlignTop)
 
-        self.usernameLabel = QLabel(self)
-        self.usernameLabel.setText("Username: ")
-        self.usernameLineEdit = QLineEdit(self)
-        self.usernameLabel.setBuddy(self.usernameLineEdit)
+        self.menu = self.parent().menuBar()
+        fileMenu = self.menu.addMenu("&File")
+        importAction = QAction("&Import from CSV", self)
+        importAction.triggered.connect(self.importFromCSV)
+        exportAction = QAction("&Export to CSV", self)
+        exportAction.triggered.connect(self.exportToCSV)
+        fileMenu.addAction(importAction)
+        fileMenu.addAction(exportAction)
 
-        self.passwordLabel = QLabel(self)
-        self.passwordLabel.setText("Password: ")
-        self.passwordLineEdit = QLineEdit(self)
-        self.passwordLabel.setBuddy(self.passwordLineEdit)
+        serviceLabel = QLabel("Service: ")
+        self.serviceLineEdit = QLineEdit()
+        serviceLabel.setBuddy(self.serviceLineEdit)
 
-        self.createRowButton = QPushButton(self)
-        self.createRowButton.setText("ADD")
-        self.createRowButton.clicked.connect(self.createNewRow)
+        usernameLabel = QLabel("Username: ")
+        self.usernameLineEdit = QLineEdit()
+        usernameLabel.setBuddy(self.usernameLineEdit)
 
-        self.inputHBox = QHBoxLayout()
-        self.inputHBox.addWidget(self.serviceLabel)
-        self.inputHBox.addWidget(self.serviceLineEdit)
-        self.inputHBox.addWidget(self.usernameLabel)
-        self.inputHBox.addWidget(self.usernameLineEdit)
-        self.inputHBox.addWidget(self.passwordLabel)
-        self.inputHBox.addWidget(self.passwordLineEdit)
-        self.inputHBox.addWidget(self.createRowButton)
+        passwordLabel = QLabel("Password: ")
+        self.passwordLineEdit = QLineEdit()
+        passwordLabel.setBuddy(self.passwordLineEdit)
 
-        self.searchLabel = QLabel(self)
-        self.searchLabel.setText("Search: ")
+        createRowButton = QPushButton("ADD")
+        createRowButton.clicked.connect(self.createNewRow)
 
+        inputHBox = QHBoxLayout()
+        inputHBox.addWidget(serviceLabel)
+        inputHBox.addWidget(self.serviceLineEdit)
+        inputHBox.addWidget(usernameLabel)
+        inputHBox.addWidget(self.usernameLineEdit)
+        inputHBox.addWidget(passwordLabel)
+        inputHBox.addWidget(self.passwordLineEdit)
+        inputHBox.addWidget(createRowButton)
+
+        searchLabel = QLabel("Search: ")
         self.searchLineEdit = QLineEdit(self)
         self.searchLineEdit.textChanged.connect(self.redisplay)
-        self.searchLineEdit.setMaximumWidth(500)
-        self.searchLabel.setBuddy(self.searchLineEdit)
+        spacer = QSpacerItem(self.window().width() // 5, 0)
+        searchLabel.setBuddy(self.searchLineEdit)
 
-        self.searchHBox = QHBoxLayout()
-        self.searchHBox.addWidget(self.searchLabel)
-        self.searchHBox.addWidget(self.searchLineEdit)
-        self.searchHBox.addStretch()
+        searchHBox = QHBoxLayout()
+        searchHBox.addWidget(searchLabel)
+        searchHBox.addWidget(self.searchLineEdit)
+        searchHBox.addSpacerItem(spacer)
+        searchHBox.setContentsMargins(0, 0, 0, 30)
 
-        self.vbox.addLayout(self.inputHBox)
-        self.vbox.addLayout(self.searchHBox)
+        self.vbox.addLayout(inputHBox)
+        self.vbox.addLayout(searchHBox)
+
+        self.generateHeader()
 
         try:
-            df = pd.read_csv(os.path.join(basedir, 'secretformula.csv'), header = None)
-            self.generateHeader()
-            df.apply(self.generateRow, axis = 1)
-        except Exception as ex:
-            print(ex)
-            self.generateHeader()
+            self.loadPasswords()
+        except:
+            pass
 
         self.setLayout(self.vbox)
 
     def generateHeader(self):
         hbox = QHBoxLayout()
-        serviceButton = QPushButton("Service")
-        serviceButton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setStyle(serviceButton, True)
+        serviceHeader = QLabel("Service")
+        serviceHeader.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        serviceHeader.setAlignment(Qt.AlignCenter)
+        self.setStyle(serviceHeader, True)
 
-        usernameButton = QPushButton("Username")
-        usernameButton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setStyle(usernameButton, True)
+        usernameHeader = QLabel("Username")
+        usernameHeader.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        usernameHeader.setAlignment(Qt.AlignCenter)
+        self.setStyle(usernameHeader, True)
 
-        passwordButton = QPushButton("Password")
-        passwordButton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setStyle(passwordButton, True)
+        passwordHeader = QLabel("Password")
+        passwordHeader.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        passwordHeader.setAlignment(Qt.AlignCenter)
+        self.setStyle(passwordHeader, True)
 
-        button1 = QPushButton("EDIT")
+        button1 = QPushButton("  EDIT  ")
         customHide(button1, True)
-        button2 = QPushButton("DELETE")
+        button2 = QPushButton(" DELETE  ")
         customHide(button2, True)
-        hbox.addWidget(serviceButton)
-        hbox.addWidget(usernameButton)
-        hbox.addWidget(passwordButton)
+        hbox.addWidget(serviceHeader)
+        hbox.addWidget(usernameHeader)
+        hbox.addWidget(passwordHeader)
         hbox.addWidget(button1)
         hbox.addWidget(button2)
+
+        hbox.setContentsMargins(0, 0, 0, 10)
         self.vbox.addLayout(hbox)
 
     def generateRow(self, row : list):
@@ -258,12 +313,13 @@ class PasswordView(QWidget):
         usernameLineEdit.hide()
         passwordLineEdit.hide()
 
-        deleteButton = QPushButton("DELETE")
-        yesButton = QPushButton("YES")
-        noButton = QPushButton("NO")
-        editButton = QPushButton("EDIT")
+        deleteButton = QPushButton(" DELETE  ")
+        yesButton = QPushButton("   YES   ")
+        noButton = QPushButton("     NO     ")
+        editButton = QPushButton("  EDIT  ")
         confirmButton = QPushButton("CONFIRM")
         cancelButton = QPushButton("CANCEL")
+    
         
         yesButton.hide()
         noButton.hide()
@@ -276,6 +332,8 @@ class PasswordView(QWidget):
         editButton.clicked.connect(lambda:self.editButtonFunction(serviceButton, usernameButton, passwordButton, serviceLineEdit, usernameLineEdit, passwordLineEdit, editButton, cancelButton, confirmButton, deleteButton))
         cancelButton.clicked.connect(lambda:self.cancelButtonFunction(serviceButton, usernameButton, passwordButton, serviceLineEdit, usernameLineEdit, passwordLineEdit, editButton, cancelButton, confirmButton, deleteButton))
         confirmButton.clicked.connect(lambda:self.confirmButtonFunction(serviceButton, usernameButton, passwordButton, serviceLineEdit, usernameLineEdit, passwordLineEdit, editButton, cancelButton, confirmButton, deleteButton))
+
+        
 
         hbox.addWidget(serviceButton)
         hbox.addWidget(usernameButton)
@@ -298,19 +356,29 @@ class PasswordView(QWidget):
         username = self.usernameLineEdit.text()
         password = self.passwordLineEdit.text()
 
-        if (service and username and password):
-            decryptCSV(self.key)
-            with open(os.path.join(basedir, 'secretformula.csv'), 'a', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow([service, username, password])
-            encryptCSV(self.key)
+        # not sure if this even matters, python seems to convert it into a UTF character regardless if its in a string
+        try:
+            service.encode(encoding = 'UTF-8', errors = 'strict')
+            username.encode(encoding = 'UTF-8', errors = 'strict')
+            password.encode(encoding = 'UTF-8', errors = 'strict')
+        except:
+            QMessageBox.warning(self, "Warning", "Cannot accept non UTF-8 characters.")
 
+        if (service and username and password):
+            self.writeRow([service, username, password])
             self.generateRow([service, username, password])
 
             self.serviceLineEdit.setText("")
             self.usernameLineEdit.setText("")
             self.passwordLineEdit.setText("")
 
+    def writeRow(self, row: list):
+        decryptCSV(self.key)
+        with open(os.path.join(basedir, 'secretformula.csv'), 'a', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([row[0], row[1], row[2]])
+        encryptCSV(self.key)        
+        
     def redisplay(self):
         self.grey = False
         for i in range(3, self.vbox.count()):
@@ -329,13 +397,19 @@ class PasswordView(QWidget):
                 for j in range(0, 12):
                     self.vbox.itemAt(i).itemAt(j).widget().hide()
 
-    def setStyle(self, button : QPushButton, green : bool = False):
+    def setStyle(self, widget : QWidget, green : bool = False):
+        
         if (green):
-            button.setStyleSheet("background-color:green; color:white; font-family: \"Comic Sans MS\", \"Comic Sans\"; font-size:18px;")
+            widget.setFont(QFont('Inter', 12, weight=100))
         elif (self.grey):
-            button.setStyleSheet("background-color:#808080; color:white; font-family: \"Comic Sans MS\", \"Comic Sans\"; font-size:18px;")
+            palette = widget.palette()
+            palette.setColor(QPalette.Button, QColor('#A9A9A9'))
+            palette.setBrush(QPalette.ButtonText, QColor('white'))
+            widget.setAutoFillBackground(True)
+            widget.setPalette(palette)
+            widget.update()
         else:
-            button.setStyleSheet("background-color:white; color:black; font-family: \"Comic Sans MS\", \"Comic Sans\"; font-size:18px;")
+            widget.setFont(QFont('Inter', 10))
 
     def deleteButtonFunction(self, deleteButton : QPushButton, yesButton : QPushButton, noButton : QPushButton, editButton : QPushButton):
         editButton.hide()
@@ -386,32 +460,77 @@ class PasswordView(QWidget):
         deleteButton.show()
 
     def confirmButtonFunction(self, serviceButton : QPushButton, usernameButton : QPushButton, passwordButton : PasswordButton, serviceLineEdit : QLineEdit, usernameLineEdit : QLineEdit, passwordLineEdit : QLineEdit, editButton : QPushButton, cancelButton : QPushButton, confirmButton : QPushButton, deleteButton : QPushButton):
-        serviceButton.setText(serviceLineEdit.text())
-        usernameButton.setText(usernameLineEdit.text())
-        passwordButton.setPassword(passwordLineEdit.text())
-        passwordButton.setText("*****")
-        serviceLineEdit.hide()
-        usernameLineEdit.hide()
-        passwordLineEdit.hide()
-        serviceButton.show()
-        usernameButton.show()
-        passwordButton.show()
-        cancelButton.hide()
-        confirmButton.hide()
-        editButton.show()
-        deleteButton.show()
-        self.updateCSV()
+        service = serviceLineEdit.text()
+        username = usernameLineEdit.text()
+        password = passwordLineEdit.text()
+
+        # not sure if this even matters, python seems to convert it into a UTF character regardless if its in a string
+        try:
+            service.encode(encoding = 'UTF-8', errors = 'strict')
+            username.encode(encoding = 'UTF-8', errors = 'strict')
+            password.encode(encoding = 'UTF-8', errors = 'strict')
+        except:
+            QMessageBox.warning(self, "Warning", "Cannot accept non UTF-8 characters.")
+            serviceLineEdit.setText("")
+            usernameLineEdit.setText("")
+            passwordLineEdit.setText("")
+
+        if (service and username and password):
+            serviceButton.setText(service)
+            usernameButton.setText(username)
+            passwordButton.setPassword(password)
+            passwordButton.setText("*****")
+            serviceLineEdit.hide()
+            usernameLineEdit.hide()
+            passwordLineEdit.hide()
+            serviceButton.show()
+            usernameButton.show()
+            passwordButton.show()
+            cancelButton.hide()
+            confirmButton.hide()
+            editButton.show()
+            deleteButton.show()
+            self.updateCSV()
+
+    def loadPasswords(self):
+        with open(os.path.join(basedir, 'secretformula.csv'), 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                self.generateRow(row)
 
     def updateCSV(self):
-        with open(os.path.join(basedir, 'secretformula.csv'), 'w', newline='') as f:
+        with open(os.path.join(basedir, 'secretformula.csv'), 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             for i in range(3, self.vbox.count()):
                 writer.writerow([self.vbox.itemAt(i).itemAt(0).widget().text(), self.vbox.itemAt(i).itemAt(1).widget().text(), self.vbox.itemAt(i).itemAt(2).widget().password()])
         encryptCSV(self.key)
+
+    def importFromCSV(self):
+        file = QFileDialog.getOpenFileName(self, 'Select a File', filter="Comma Separated Value (*.csv)")[0]
+        try:
+            with open(os.path.join(basedir, file), 'r', newline='', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if (len(row) >= 3 and row[0] and row[1] and row[2]):
+                        self.writeRow(row)
+                        self.generateRow(row)
+        except:
+            QMessageBox.warning(self, "Error", "Could not read csv file, check that it does not contain non UTF-8 characters.")
+    
+    def exportToCSV(self):
+        file = QFileDialog.getSaveFileName(self, 'Select or Create a File', filter="Comma Separated Value (*.csv)")[0]
+
+        try:
+            with open(os.path.join(basedir, file), 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                for i in range(3, self.vbox.count()):
+                    writer.writerow([self.vbox.itemAt(i).itemAt(0).widget().text(), self.vbox.itemAt(i).itemAt(1).widget().text(), self.vbox.itemAt(i).itemAt(2).widget().password()])
+        except:
+            pass
         
 
 def createCSV(password : str):
-    with open(os.path.join(basedir, 'secretformula.csv'), 'w', newline='') as f:
+    with open(os.path.join(basedir, 'secretformula.csv'), 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
 
     salt = os.urandom(16)
@@ -461,11 +580,11 @@ def generateKey(password : str):
 def copyToClipBoard(text : str):
     pyperclip.copy(text)
 
-def customHide(button : QPushButton, inPlace : bool = False):
-    sp = button.sizePolicy()
+def customHide(widget : QWidget, inPlace : bool = False):
+    sp = widget.sizePolicy()
     sp.setRetainSizeWhenHidden(inPlace)
-    button.setSizePolicy(sp)
-    button.hide()    
+    widget.setSizePolicy(sp)
+    widget.hide()    
 
 if __name__ == '__main__':
 
@@ -481,7 +600,8 @@ if __name__ == '__main__':
     app.setStyle('Fusion')
     app.setWindowIcon(QIcon(os.path.join(basedir, 'icon.ico')))
     window = MainWindow()
-    window.setFixedWidth(900)
-    window.setMinimumHeight(600)
+    screen = app.primaryScreen()
+    window.setMinimumWidth(screen.size().width() // 2)
+    window.setMinimumHeight(screen.size().width() * 3 // 9)
     window.show()
     sys.exit(app.exec_())
