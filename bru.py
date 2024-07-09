@@ -96,6 +96,9 @@ class MainWindow(QMainWindow):
         self.scene.currentWidget().errorLabel.show()
         self.scene.currentWidget().setTimeout(timeout)
 
+    def logout(self):
+        self.switchWidget(Login(self))
+
 class FirstTime(QDialog) :
     def __init__(self, parent=None):
         super(FirstTime, self).__init__(parent)
@@ -194,6 +197,11 @@ class PasswordView(QWidget):
         super(PasswordView, self).__init__(parent)
         self.initUI()
         self.key = key
+        self.inactivityTimer = QTimer(self)
+        self.inactivityTimer.setInterval(300000) # 5 mins
+        self.inactivityTimer.timeout.connect(self.parent().logout)
+        self.inactivityTimer.start()
+        self.setMouseTracking(True)
 
     def initUI(self):
         self.grey = False
@@ -527,6 +535,10 @@ class PasswordView(QWidget):
                     writer.writerow([self.vbox.itemAt(i).itemAt(0).widget().text(), self.vbox.itemAt(i).itemAt(1).widget().text(), self.vbox.itemAt(i).itemAt(2).widget().password()])
         except:
             pass
+
+    def mouseMoveEvent(self, event):
+        self.inactivityTimer.start()
+
         
 
 def createCSV(password : str):
